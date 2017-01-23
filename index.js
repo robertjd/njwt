@@ -333,7 +333,6 @@ Verifier.prototype.isSupportedAlg = isSupportedAlg;
 
 Verifier.prototype.verify = function verify(jwtString,cb){
   var jwt;
-
   var done = handleError.bind(null,cb);
 
   try {
@@ -416,14 +415,27 @@ function JwtVerifier() {
   if (!(this instanceof JwtVerifier)) {
     return new JwtVerifier();
   }
+  this._signingKey = null;
+  this._signingAlgorithm = 'HS256';
+  this._keyResolver = defaultKeyResolver;
 }
 
 JwtVerifier.prototype.withKeyResolver = function withKeyResolver(keyResolver) {
   this._keyResolver = keyResolver;
   return this;
-}
+};
 
-JwtVerifier.prototype.verify = function verify(jwtString,secret,alg,cb) {
+JwtVerifier.prototype.withSigningKey = function withSigningKey(key) {
+  this._signingKey = key;
+  return this;
+};
+
+JwtVerifier.prototype.withAlgorithm = function withAlgorithm(alg) {
+  this._signingAlgorithm = alg;
+  return this;
+};
+
+JwtVerifier.prototype.verify = function verify(jwtString, cb) {
   var args = Array.prototype.slice.call(arguments);
   if (typeof args[args.length-1]==='function') {
     cb = args.pop();
@@ -433,23 +445,16 @@ JwtVerifier.prototype.verify = function verify(jwtString,secret,alg,cb) {
 
   var verifier = new Verifier();
 
-  if (typeof this._keyResolver === 'function') {
-    verifier.setKeyResolver(this._keyResolver);
+  verifier.setKeyResolver(this._keyResolver);
+  verifier.setSigningAlgorithm(this._signingAlgorithm);
+  verifier.setSigningKey(this._signingKey);
+
+  if(cb){
+    return verifier.verify(jwtString,cb);
   }
 
-  if(args.length===3){
-    verifier.setSigningAlgorithm(alg);
-  }else{
-    verifier.setSigningAlgorithm('HS256');
-  }
+  return verifier.verify(jwtString);
 
-  if(args.length===1){
-    verifier.setSigningAlgorithm('none');
-  }else{
-    verifier.setSigningKey(secret);
-  }
-
-  return verifier.verify(jwtString,cb);
 };
 
 var jwtLib = {
@@ -460,9 +465,17 @@ var jwtLib = {
   Verifier: Verifier,
   base64urlEncode: base64urlEncode,
   base64urlUnescape:base64urlUnescape,
-  verify: function(){
-    var jwtVerifier = this.createVerifier();
-    return jwtVerifier.verify.apply(jwtVerifier, arguments);
+  verify: function(token, signingKey, alg, callback){
+    var jwtVerifier = this.createVerifier()
+      .withSigningKey(signingKey);
+
+    if (typeof alg === 'string') {
+      jwtVerifier.withAlgorithm(alg);
+    }
+
+    var cb = typeof alg === 'function' ? alg : typeof callback === 'function' ? callback : null;
+
+    return jwtVerifier.verify(token, cb);
   },
   createVerifier: function(){
     return new JwtVerifier();
